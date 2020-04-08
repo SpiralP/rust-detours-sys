@@ -17,12 +17,7 @@ fn main() {
     )
     .unwrap();
 
-    // Tell cargo to tell rustc to link the system bzip2
-    // shared library.
     println!("cargo:rustc-link-lib=static=detours");
-
-    // Tell cargo to invalidate the built crate whenever the wrapper changes
-    println!("cargo:rerun-if-changed=wrapper.h");
 
     // The bindgen::Builder is the main entry point
     // to bindgen, and lets you build up options for

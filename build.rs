@@ -1,30 +1,54 @@
 use std::{
-    env, fs,
+    env, fs,io,
     path::{Path, PathBuf},
+    process::Command,
 };
 
 fn main() {
     let target = env::var("TARGET").unwrap();
     let out_dir = env::var("OUT_DIR").unwrap();
+    let out_dir = Path::new(&out_dir);
 
-    let mut nmake = cc::windows_registry::find(&target, "nmake.exe").unwrap();
 
-    assert!(nmake.current_dir("Detours/src").status().unwrap().success());
+    fs::copy(r#"Detours\system.mak"#, out_dir.join("system.mak")).unwrap();
 
-    fs::copy(
-        "Detours/lib.X64/detours.lib",
-        Path::new(&out_dir).join("detours.lib"),
-    )
-    .unwrap();
+    let src_path = out_dir.join("src");
+    if let Err(e) = fs::remove_dir_all(&src_path) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("{}",e);
+        }
+    }
+    fs::create_dir_all(&src_path).unwrap();
+    for entry in fs::read_dir(r#"Detours\src"#).unwrap() {
+        let entry = entry.unwrap();
+        let metadata = entry.metadata().unwrap();
+        assert!(metadata.is_file());
+        fs::copy(entry.path(), src_path.join(entry.file_name())).unwrap();
+    }
 
-    println!("cargo:rustc-link-search=native={}", out_dir);
+
+    let mut nmake = cc::windows_registry::find_tool(&target, "nmake.exe").unwrap();
+
+
+    assert!(nmake.to_command()
+        .current_dir(&src_path)
+        .arg("INCD=include")
+        .arg("LIBD=lib")
+        .arg("BIND=bin")
+        .arg("OBJD=obj")
+        .status()
+        .unwrap()
+        .success());
+
+
+    println!("cargo:rustc-link-search=native={}", src_path.join("lib").display());
     println!("cargo:rustc-link-lib=static=detours");
 
     // The bindgen::Builder is the main entry point
     // to bindgen, and lets you build up options for
     // the resulting bindings.
     let bindings = bindgen::Builder::default()
-        .clang_arg("-IDetours/include")
+        .clang_args(&["-I", &format!(r#"{}\src\include"#, out_dir.display())])
         // The input header we would like to generate
         // bindings for.
         .header_contents(
